@@ -1,9 +1,9 @@
 <?php
 declare(strict_types=1);
 
-// For localhost dev, secure=false is OK.
-// In production (Railway + HTTPS), set secure=true.
-$secureCookies = true;
+// Cookies: secure should be true on HTTPS (Railway), but for localhost it must be false
+$isLocal = ($_SERVER['HTTP_HOST'] ?? '') === 'localhost' || str_starts_with($_SERVER['HTTP_HOST'] ?? '', '127.0.0.1');
+$secureCookies = $isLocal ? false : true;
 
 session_set_cookie_params([
   "httponly" => true,
@@ -13,13 +13,15 @@ session_set_cookie_params([
 
 session_start();
 
-// XAMPP defaults:
+// Supabase Postgres connection (use env vars in Railway)
 $dbHost = $_ENV["DB_HOST"] ?? "db.jskvgcvpvgwsneeohaow.supabase.co";
-$dbName = $_ENV["DB_NAME"] ?? "arian_admin";
+$dbPort = (int)($_ENV["DB_PORT"] ?? 5432);
+$dbName = $_ENV["DB_NAME"] ?? "postgres";
 $dbUser = $_ENV["DB_USER"] ?? "postgres";
-$dbPass = $_ENV["DB_PASS"] ?? "ArianVahdat03!";
+$dbPass = $_ENV["DB_PASS"] ?? "";
 
-$dsn = "mysql:host={$dbHost};dbname={$dbName};charset=utf8mb4";
+// IMPORTANT: Supabase requires SSL
+$dsn = "pgsql:host={$dbHost};port={$dbPort};dbname={$dbName};sslmode=require";
 
 try {
   $pdo = new PDO($dsn, $dbUser, $dbPass, [
