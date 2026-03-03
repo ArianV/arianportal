@@ -147,14 +147,13 @@ require __DIR__ . "/partials/top.php";
                    style="font-family:var(--mono); font-size:18px;">
           </div>
 
-          <div style="margin-top:10px;">
-            <label>Note (optional)</label>
-            <input id="note" class="input" placeholder="e.g. groceries, gas, rent"
-                   style="font-family:var(--mono);">
-          </div>
-
           <div class="hr"></div>
 
+          <!--  -->
+          <!--  -->
+          <!-- Load to Savings after so refreshing page doesnt do another transaction -->
+          <!--  -->
+          <!--  -->
           <div class="t">QUICK ADD</div>
           <div class="quick-grid" style="margin-top:10px;">
             <?php foreach ([5,10,20,50,100] as $q): ?>
@@ -162,7 +161,6 @@ require __DIR__ . "/partials/top.php";
                 +$<?= $q ?>
               </button>
             <?php endforeach; ?>
-            <button type="button" class="btn btn-ghost" id="maxBtn" style="font-family:var(--mono);">+ Custom</button>
           </div>
 
           <div class="hr"></div>
@@ -184,8 +182,6 @@ require __DIR__ . "/partials/top.php";
               <button class="btn btn-ghost" type="submit" style="width:100%;">Withdraw</button>
             </form>
           </div>
-
-          <p class="sub" style="margin:12px 0 0;">Keypad supports up to 2 decimals. Withdraw blocks overdraft.</p>
         </div>
 
         <!-- Right: numpad + history -->
