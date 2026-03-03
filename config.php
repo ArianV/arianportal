@@ -1,8 +1,9 @@
 <?php
 declare(strict_types=1);
 
-// Cookies: secure should be true on HTTPS (Railway), but for localhost it must be false
-$isLocal = ($_SERVER['HTTP_HOST'] ?? '') === 'localhost' || str_starts_with($_SERVER['HTTP_HOST'] ?? '', '127.0.0.1');
+// Secure cookies should be FALSE on localhost (no https), TRUE on Railway (https)
+$hostHeader = $_SERVER['HTTP_HOST'] ?? '';
+$isLocal = ($hostHeader === 'localhost' || str_starts_with($hostHeader, '127.0.0.1'));
 $secureCookies = $isLocal ? false : true;
 
 session_set_cookie_params([
@@ -13,14 +14,13 @@ session_set_cookie_params([
 
 session_start();
 
-// Supabase Postgres connection (use env vars in Railway)
 $dbHost = $_ENV["DB_HOST"] ?? "db.jskvgcvpvgwsneeohaow.supabase.co";
 $dbPort = (int)($_ENV["DB_PORT"] ?? 5432);
 $dbName = $_ENV["DB_NAME"] ?? "postgres";
 $dbUser = $_ENV["DB_USER"] ?? "postgres";
 $dbPass = $_ENV["DB_PASS"] ?? "";
 
-// IMPORTANT: Supabase requires SSL
+// Supabase requires SSL
 $dsn = "pgsql:host={$dbHost};port={$dbPort};dbname={$dbName};sslmode=require";
 
 try {
@@ -30,7 +30,7 @@ try {
   ]);
 } catch (PDOException $e) {
   http_response_code(500);
-  echo "Database connection failed.";
+  echo "Database connection has failed.";
   exit;
 }
 
