@@ -13,5 +13,5 @@ if (ini_get("session.use_cookies")) {
 clear_remember_me($pdo);
 session_destroy();
 
-header("Location: login.php");
+header("Location: login");
 exit;

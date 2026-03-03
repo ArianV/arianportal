@@ -27,7 +27,7 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
       $secureCookies = true; // match config.php setting
       create_remember_me($pdo, (int)$user["id"], $secureCookies);
 
-      header("Location: dashboard.php");
+      header("Location: dashboard");
       exit;
     }
   }

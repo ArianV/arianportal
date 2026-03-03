@@ -57,6 +57,6 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
     <button type="submit">Create</button>
   </form>
 
-  <p><a href="dashboard.php">Back to dashboard</a></p>
+  <p><a href="dashboard">Back to dashboard</a></p>
 </body>
 </html>
