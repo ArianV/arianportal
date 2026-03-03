@@ -3,7 +3,7 @@ declare(strict_types=1);
 
 // For localhost dev, secure=false is OK.
 // In production (Railway + HTTPS), set secure=true.
-$secureCookies = false;
+$secureCookies = true;
 
 session_set_cookie_params([
   "httponly" => true,

@@ -24,7 +24,7 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
       $_SESSION["username"] = $username;
       $_SESSION["role"] = $user["role"];
 
-      $secureCookies = false; // match config.php setting
+      $secureCookies = true; // match config.php setting
       create_remember_me($pdo, (int)$user["id"], $secureCookies);
 
       header("Location: dashboard.php");
