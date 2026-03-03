@@ -3,6 +3,7 @@ FROM php:8.2-apache
 RUN apt-get update && apt-get install -y libpq-dev \
     && docker-php-ext-install pdo_pgsql pgsql \
     && a2enmod rewrite \
+    && sed -i 's/AllowOverride None/AllowOverride All/g' /etc/apache2/apache2.conf
     # Disable ALL MPMs first (ignore errors), then enable only prefork
     && a2dismod mpm_event mpm_worker mpm_prefork || true \
     # Force-remove any leftover enabled MPM symlinks (this is the key)
