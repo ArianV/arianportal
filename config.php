@@ -35,4 +35,5 @@ try {
 }
 
 require_once __DIR__ . "/remember.php";
+require_once __DIR__ . "/csrf.php";
 try_auto_login($pdo, $secureCookies);

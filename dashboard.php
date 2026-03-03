@@ -56,16 +56,16 @@ $username = $_SESSION["username"] ?? "User";
               <div class="v">Menu</div>
 
               <p class="sub" style="margin:10px 0 0;">
-                <a href="savings.php">Savings</a>
+                <a href="savings">Savings</a>
               </p>
               <p class="sub" style="margin:10px 0 0;">
-                <a href="payments.php">Payments</a>
+                <a href="payments">Payments</a>
               </p>
 
               <!-- Move this to SETTINGS page when created -->
               <?php if (($_SESSION["role"] ?? "") === "admin"): ?>
                 <p class="sub" style="margin:10px 0 0;">
-                  <a href="admin_create_user.php">Create user</a>
+                  <a href="admin_create_user">Create user</a>
                 </p>
               <?php endif; ?>
               <!-- -->
