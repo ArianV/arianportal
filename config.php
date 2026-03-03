@@ -14,10 +14,10 @@ session_set_cookie_params([
 session_start();
 
 // XAMPP defaults:
-$dbHost = $_ENV["DB_HOST"] ?? "127.0.0.1";
+$dbHost = $_ENV["DB_HOST"] ?? "db.jskvgcvpvgwsneeohaow.supabase.co";
 $dbName = $_ENV["DB_NAME"] ?? "arian_admin";
-$dbUser = $_ENV["DB_USER"] ?? "root";
-$dbPass = $_ENV["DB_PASS"] ?? "";
+$dbUser = $_ENV["DB_USER"] ?? "postgres";
+$dbPass = $_ENV["DB_PASS"] ?? "ArianVahdat03!";
 
 $dsn = "mysql:host={$dbHost};dbname={$dbName};charset=utf8mb4";
 
