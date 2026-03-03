@@ -30,7 +30,7 @@ try {
   ]);
 } catch (PDOException $e) {
   http_response_code(500);
-  echo "Database connection has failed.";
+  echo "Database connection failed: " . htmlspecialchars($e->getMessage());
   exit;
 }
 
