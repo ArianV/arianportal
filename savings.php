@@ -206,43 +206,54 @@ require __DIR__ . "/partials/top.php";
 
           <div class="hr"></div>
 
-          <div class="t">RECENT ACTIVITY</div>
+          <div class="row">
+            <div>
+              <div class="t">RECENT ACTIVITY</div>
+              <div class="sub" style="margin-top:6px;">Hidden by default — tap to expand.</div>
+            </div>
 
-          <div style="margin-top:10px; display:grid; gap:10px;">
-            <?php if (count($tx) === 0): ?>
-              <div class="sub">No transactions yet. Add or withdraw to start your history.</div>
-            <?php else: ?>
-              <?php foreach ($tx as $i => $r):
-                $type = $r["type"];
-                $sign = ($type === "add") ? "+" : "-";
-                $amt = money_fmt((int)$r["amount_cents"]);
-                $after = money_fmt((int)$r["balance_after_cents"]);
-                $note = $r["note"];
-                $when = date("M j, Y g:i A", strtotime((string)$r["created_at"]));
-              ?>
-                <div class="tile tx-row" style="padding:12px 12px;">
-                  <div class="row" style="align-items:flex-start;">
-                    <div>
-                      <div class="t" style="opacity:.8;"><?= htmlspecialchars(strtoupper($type)) ?> • <?= htmlspecialchars($when) ?></div>
-                      <div class="v" style="font-size:16px; font-family:var(--mono);">
-                        <?= htmlspecialchars($sign . $amt) ?>
-                      </div>
-                      <?php if ($note): ?>
-                        <div class="sub" style="margin-top:6px; font-family:var(--mono); opacity:.85;">
-                          note: <?= htmlspecialchars($note) ?>
+            <button type="button" class="btn btn-ghost" id="toggleActivity"
+                    style="font-family:var(--mono);">
+              Show activity
+            </button>
+          </div>
+
+          <div id="activityWrap" class="collapsible" style="margin-top:12px;">
+            <div style="display:grid; gap:10px;">
+              <?php if (count($tx) === 0): ?>
+                <div class="sub">No transactions yet. Add or withdraw to start your history.</div>
+              <?php else: ?>
+                <?php foreach ($tx as $r):
+                  $type = $r["type"];
+                  $sign = ($type === "add") ? "+" : "-";
+                  $amt = money_fmt((int)$r["amount_cents"]);
+                  $after = money_fmt((int)$r["balance_after_cents"]);
+                  $note = $r["note"];
+                  $when = date("M j, Y g:i A", strtotime((string)$r["created_at"]));
+                ?>
+                  <div class="tile tx-row" style="padding:12px 12px;">
+                    <div class="row" style="align-items:flex-start;">
+                      <div>
+                        <div class="t" style="opacity:.8;"><?= htmlspecialchars(strtoupper($type)) ?> • <?= htmlspecialchars($when) ?></div>
+                        <div class="v" style="font-size:16px; font-family:var(--mono);">
+                          <?= htmlspecialchars($sign . $amt) ?>
                         </div>
-                      <?php endif; ?>
-                    </div>
-                    <div style="text-align:right;">
-                      <div class="t">AFTER</div>
-                      <div class="v" style="font-family:var(--mono); font-size:15px;"><?= htmlspecialchars($after) ?></div>
+                        <?php if ($note): ?>
+                          <div class="sub" style="margin-top:6px; font-family:var(--mono); opacity:.85;">
+                            note: <?= htmlspecialchars($note) ?>
+                          </div>
+                        <?php endif; ?>
+                      </div>
+                      <div style="text-align:right;">
+                        <div class="t">AFTER</div>
+                        <div class="v" style="font-family:var(--mono); font-size:15px;"><?= htmlspecialchars($after) ?></div>
+                      </div>
                     </div>
                   </div>
-                </div>
-              <?php endforeach; ?>
-            <?php endif; ?>
+                <?php endforeach; ?>
+              <?php endif; ?>
+            </div>
           </div>
-        </div>
       </div>
 
     </div>
@@ -364,6 +375,21 @@ require __DIR__ . "/partials/top.php";
     setTimeout(() => statusBox.style.transform = 'translateY(0)', 140);
   }
 })();
+
+// Collapsible activity toggle
+const toggleBtn = document.getElementById('toggleActivity');
+const activityWrap = document.getElementById('activityWrap');
+
+if (toggleBtn && activityWrap) {
+  // start collapsed
+  let open = false;
+
+  toggleBtn.addEventListener('click', () => {
+    open = !open;
+    activityWrap.classList.toggle('open', open);
+    toggleBtn.textContent = open ? 'Hide activity' : 'Show activity';
+  });
+}
 </script>
 
 <?php require __DIR__ . "/partials/bottom.php"; ?>

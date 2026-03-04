@@ -328,3 +328,14 @@ a:hover{ text-decoration:underline; }
 .quick-grid{
   display:flex; flex-wrap:wrap; gap:10px;
 }
+/* Collapsible Activity */
+.collapsible {
+  max-height: 0;
+  overflow: hidden;
+  transition: max-height .35s cubic-bezier(.2,.8,.2,1), opacity .25s ease;
+  opacity: 0;
+}
+.collapsible.open {
+  max-height: 900px; /* big enough for your list */
+  opacity: 1;
+}
