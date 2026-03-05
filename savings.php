@@ -7,6 +7,17 @@ $userId = (int)$_SESSION["user_id"];
 $error = "";
 $success = "";
 
+function flash_set(string $key, string $value): void {
+  $_SESSION["flash_" . $key] = $value;
+}
+
+function flash_get(string $key): string {
+  $k = "flash_" . $key;
+  $v = $_SESSION[$k] ?? "";
+  unset($_SESSION[$k]);
+  return $v;
+}
+
 function money_fmt(int $cents): string {
   return "$" . number_format($cents / 100, 2, ".", ",");
 }
@@ -17,8 +28,6 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
 
   $action = $_POST["action"] ?? "";
   $amountStr = trim($_POST["amount"] ?? "");
-  $note = trim($_POST["note"] ?? "");
-  if ($note === "") $note = null;
 
   if (!in_array($action, ["add", "withdraw"], true)) {
     $error = "Invalid action.";
@@ -59,21 +68,39 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
 
           // Insert transaction history
           $ins = $pdo->prepare("
-            INSERT INTO money_transactions (user_id, type, amount_cents, balance_after_cents, note)
-            VALUES (?, ?, ?, ?, ?)
+            INSERT INTO money_transactions (user_id, type, amount_cents, balance_after_cents)
+            VALUES (?, ?, ?, ?)
           ");
-          $ins->execute([$userId, $action, $amountCents, $newBalance, $note]);
+          $ins->execute([$userId, $action, $amountCents, $newBalance]);
 
           $pdo->commit();
-          $success = ($action === "add") ? "Added." : "Withdrew.";
+
+          // store message for next request
+          flash_set("success", ($action === "add") ? "Added." : "Withdrew.");
+
+          // PRG redirect so refresh doesn't re-post
+          header("Location: /savings");
+          exit;
         }
       } catch (Throwable $e) {
         if ($pdo->inTransaction()) $pdo->rollBack();
-        $error = "Something went wrong updating balance.";
+
+        // TEMP DEBUG: show the real reason
+        $error = "DB error: " . $e->getMessage();
+
+        // (Optional) also log to Railway logs
+        error_log("Savings DB error: " . $e->getMessage());
       }
     }
   }
 }
+
+// Pull flash messages set during the POST, after redirect
+$flashSuccess = flash_get("success");
+$flashError   = flash_get("error");
+
+if ($success === "" && $flashSuccess !== "") $success = $flashSuccess;
+if ($error === "" && $flashError !== "") $error = $flashError;
 
 // Read current balance
 $stmt = $pdo->prepare("SELECT balance_cents FROM users WHERE id = ?");
@@ -82,7 +109,7 @@ $balanceCents = (int)($stmt->fetch()["balance_cents"] ?? 0);
 
 // Read recent transactions
 $txStmt = $pdo->prepare("
-  SELECT type, amount_cents, balance_after_cents, note, created_at
+  SELECT type, amount_cents, balance_after_cents, created_at
   FROM money_transactions
   WHERE user_id = ?
   ORDER BY created_at DESC
@@ -91,7 +118,7 @@ $txStmt = $pdo->prepare("
 $txStmt->execute([$userId]);
 $tx = $txStmt->fetchAll();
 
-$pageTitle = "Money Counter";
+$pageTitle = "Savings";
 require __DIR__ . "/partials/top.php";
 ?>
 
@@ -154,7 +181,7 @@ require __DIR__ . "/partials/top.php";
           <!-- Load to Savings after so refreshing page doesnt do another transaction -->
           <!--  -->
           <!--  -->
-          <div class="t">QUICK ADD</div>
+          <!-- <div class="t">QUICK ADD</div>
           <div class="quick-grid" style="margin-top:10px;">
             <?php foreach ([5,10,20,50,100] as $q): ?>
               <button type="button" class="btn btn-ghost quickBtn" data-amt="<?= $q ?>" style="font-family:var(--mono);">
@@ -163,14 +190,13 @@ require __DIR__ . "/partials/top.php";
             <?php endforeach; ?>
           </div>
 
-          <div class="hr"></div>
+          <div class="hr"></div> -->
 
           <div class="row">
             <form method="post" id="addForm" style="flex:1;">
               <input type="hidden" name="csrf_token" value="<?= htmlspecialchars(csrf_token()) ?>">
               <input type="hidden" name="action" value="add">
               <input type="hidden" name="amount" id="addAmount">
-              <input type="hidden" name="note" id="addNote">
               <button class="btn" type="submit" style="width:100%;">Add</button>
             </form>
 
@@ -178,7 +204,6 @@ require __DIR__ . "/partials/top.php";
               <input type="hidden" name="csrf_token" value="<?= htmlspecialchars(csrf_token()) ?>">
               <input type="hidden" name="action" value="withdraw">
               <input type="hidden" name="amount" id="withAmount">
-              <input type="hidden" name="note" id="withNote">
               <button class="btn btn-ghost" type="submit" style="width:100%;">Withdraw</button>
             </form>
           </div>
@@ -209,7 +234,6 @@ require __DIR__ . "/partials/top.php";
           <div class="row">
             <div>
               <div class="t">RECENT ACTIVITY</div>
-              <div class="sub" style="margin-top:6px;">Hidden by default — tap to expand.</div>
             </div>
 
             <button type="button" class="btn btn-ghost" id="toggleActivity"
@@ -228,7 +252,6 @@ require __DIR__ . "/partials/top.php";
                   $sign = ($type === "add") ? "+" : "-";
                   $amt = money_fmt((int)$r["amount_cents"]);
                   $after = money_fmt((int)$r["balance_after_cents"]);
-                  $note = $r["note"];
                   $when = date("M j, Y g:i A", strtotime((string)$r["created_at"]));
                 ?>
                   <div class="tile tx-row" style="padding:12px 12px;">
@@ -238,11 +261,6 @@ require __DIR__ . "/partials/top.php";
                         <div class="v" style="font-size:16px; font-family:var(--mono);">
                           <?= htmlspecialchars($sign . $amt) ?>
                         </div>
-                        <?php if ($note): ?>
-                          <div class="sub" style="margin-top:6px; font-family:var(--mono); opacity:.85;">
-                            note: <?= htmlspecialchars($note) ?>
-                          </div>
-                        <?php endif; ?>
                       </div>
                       <div style="text-align:right;">
                         <div class="t">AFTER</div>
@@ -263,13 +281,10 @@ require __DIR__ . "/partials/top.php";
 <script>
 (function(){
   const amount = document.getElementById('amount');
-  const note = document.getElementById('note');
   const pad = document.getElementById('pad');
   const clearBtn = document.getElementById('clearBtn');
   const addAmount = document.getElementById('addAmount');
   const withAmount = document.getElementById('withAmount');
-  const addNote = document.getElementById('addNote');
-  const withNote = document.getElementById('withNote');
   const statusBox = document.getElementById('statusBox');
   const balanceEl = document.getElementById('balance');
 
@@ -326,10 +341,6 @@ require __DIR__ . "/partials/top.php";
     amount.value = v;
     addAmount.value = v;
     withAmount.value = v;
-
-    const n = (note.value || '').trim();
-    addNote.value = n;
-    withNote.value = n;
   }
 
   pad.addEventListener('click', (e) => {
@@ -349,7 +360,6 @@ require __DIR__ . "/partials/top.php";
   });
 
   amount.addEventListener('input', syncHidden);
-  note.addEventListener('input', syncHidden);
 
   // Quick add
   document.querySelectorAll('.quickBtn').forEach(btn => {
@@ -361,10 +371,6 @@ require __DIR__ . "/partials/top.php";
     });
   });
 
-  document.getElementById('maxBtn').addEventListener('click', () => {
-    amount.focus();
-  });
-
   document.getElementById('addForm').addEventListener('submit', syncHidden);
   document.getElementById('withForm').addEventListener('submit', syncHidden);
 
@@ -374,22 +380,22 @@ require __DIR__ . "/partials/top.php";
     statusBox.style.transition = 'transform .2s ease';
     setTimeout(() => statusBox.style.transform = 'translateY(0)', 140);
   }
+
+  // Collapsible activity toggle
+  const toggleBtn = document.getElementById('toggleActivity');
+  const activityWrap = document.getElementById('activityWrap');
+                  
+  if (toggleBtn && activityWrap) {
+    // start collapsed
+    let open = false;
+                  
+    toggleBtn.addEventListener('click', () => {
+      open = !open;
+      activityWrap.classList.toggle('open', open);
+      toggleBtn.textContent = open ? 'Hide activity' : 'Show activity';
+    });
+  }
 })();
-
-// Collapsible activity toggle
-const toggleBtn = document.getElementById('toggleActivity');
-const activityWrap = document.getElementById('activityWrap');
-
-if (toggleBtn && activityWrap) {
-  // start collapsed
-  let open = false;
-
-  toggleBtn.addEventListener('click', () => {
-    open = !open;
-    activityWrap.classList.toggle('open', open);
-    toggleBtn.textContent = open ? 'Hide activity' : 'Show activity';
-  });
-}
 </script>
 
 <?php require __DIR__ . "/partials/bottom.php"; ?>

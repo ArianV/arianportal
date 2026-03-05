@@ -301,7 +301,7 @@ a:hover{ text-decoration:underline; }
   font-size: 12px;
   color: rgba(255,255,255,.78);
 }
-.actions{ display:flex; gap:10px; flex-wrap:wrap; }
+.actions{ display:flex; gap:10px; }
 .btn-ghost{
   background: rgba(0,0,0,.18);
   border:1px solid rgba(255,255,255,.14);
@@ -328,14 +328,50 @@ a:hover{ text-decoration:underline; }
 .quick-grid{
   display:flex; flex-wrap:wrap; gap:10px;
 }
-/* Collapsible Activity */
-.collapsible {
-  max-height: 0;
-  overflow: hidden;
-  transition: max-height .35s cubic-bezier(.2,.8,.2,1), opacity .25s ease;
-  opacity: 0;
+/* Payments urgency badges */
+.badge {
+  display:inline-flex;
+  align-items:center;
+  gap:8px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  border:1px solid rgba(255,255,255,.14);
+  background: rgba(0,0,0,.18);
+  font-family: var(--mono);
+  font-size: 12px;
+  color: rgba(255,255,255,.82);
 }
-.collapsible.open {
-  max-height: 900px; /* big enough for your list */
-  opacity: 1;
+.badge-dot{
+  width:8px; height:8px; border-radius:999px;
+  background: rgba(255,255,255,.55);
+  box-shadow: 0 0 10px rgba(255,255,255,.25);
+}
+
+.bill-card.overdue{
+  border-color: rgba(255,77,109,.35) !important;
+  box-shadow: 0 0 26px rgba(255,77,109,.14);
+}
+.bill-card.soon{
+  border-color: rgba(255,209,102,.32) !important;
+  box-shadow: 0 0 24px rgba(255,209,102,.12);
+}
+.bill-card.ok{
+  border-color: rgba(72,245,156,.22) !important;
+  box-shadow: 0 0 18px rgba(72,245,156,.08);
+}
+
+.badge.overdue .badge-dot{ background: rgba(255,77,109,.95); box-shadow: 0 0 14px rgba(255,77,109,.45); }
+.badge.soon .badge-dot{ background: rgba(255,209,102,.95); box-shadow: 0 0 14px rgba(255,209,102,.38); }
+.badge.ok .badge-dot{ background: rgba(72,245,156,.92); box-shadow: 0 0 14px rgba(72,245,156,.35); }
+
+/* Collapsible history */
+.collapsible{
+  max-height:0;
+  overflow:hidden;
+  opacity:0;
+  transition:max-height .35s cubic-bezier(.2,.8,.2,1), opacity .25s ease;
+}
+.collapsible.open{
+  max-height: 1200px;
+  opacity:1;
 }

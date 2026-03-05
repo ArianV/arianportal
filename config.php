@@ -14,11 +14,11 @@ session_set_cookie_params([
 
 session_start();
 
-$dbHost = $_ENV["DB_HOST"] ?? "db.jskvgcvpvgwsneeohaow.supabase.co";
-$dbPort = (int)($_ENV["DB_PORT"] ?? 5432);
+$dbHost = $_ENV["DB_HOST"] ?? "aws-1-us-west-1.pooler.supabase.com";
+$dbPort = (int)($_ENV["DB_PORT"] ?? 6543);
 $dbName = $_ENV["DB_NAME"] ?? "postgres";
-$dbUser = $_ENV["DB_USER"] ?? "postgres";
-$dbPass = $_ENV["DB_PASS"] ?? "";
+$dbUser = $_ENV["DB_USER"] ?? "postgres.jskvgcvpvgwsneeohaow";
+$dbPass = $_ENV["DB_PASS"] ?? "ArianVahdat03!";
 
 // Supabase requires SSL
 $dsn = "pgsql:host={$dbHost};port={$dbPort};dbname={$dbName};sslmode=require";

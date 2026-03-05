@@ -7,125 +7,144 @@ $userId = (int)$_SESSION["user_id"];
 $error = "";
 $success = "";
 
-/**
- * Returns the 20th-based "due date" for the current cycle:
- * - If today is on/before the 20th -> this month's 20th
- * - If today is after the 20th -> next month's 20th
- */
-function default_next_due_date(): DateTimeImmutable {
-  $today = new DateTimeImmutable("today");
-  $year = (int)$today->format("Y");
-  $month = (int)$today->format("n");
-  $day = (int)$today->format("j");
+function flash_set(string $key, string $value): void {
+  $_SESSION["flash_" . $key] = $value;
+}
 
-  if ($day <= 20) {
-    return new DateTimeImmutable(sprintf("%04d-%02d-20", $year, $month));
-  }
-  // next month 20th
-  return (new DateTimeImmutable(sprintf("%04d-%02d-20", $year, $month)))->modify("+1 month");
+function flash_get(string $key): string {
+  $k = "flash_" . $key;
+  $v = $_SESSION[$k] ?? "";
+  unset($_SESSION[$k]);
+  return $v;
 }
 
 function period_from_due(DateTimeImmutable $due): string {
   return $due->format("Y-m"); // YYYY-MM
 }
 
-function next_month_20th(DateTimeImmutable $due): DateTimeImmutable {
-  // due is already a 20th; go to next month 20th
-  return $due->modify("+1 month")->setDate(
-    (int)$due->modify("+1 month")->format("Y"),
-    (int)$due->modify("+1 month")->format("n"),
-    20
-  );
+function due_date_for_month(int $year, int $month, int $dueDay): DateTimeImmutable {
+  // dueDay 1..28 so always valid
+  return new DateTimeImmutable(sprintf("%04d-%02d-%02d", $year, $month, $dueDay));
 }
 
-function bill_label(string $billKey): string {
-  return $billKey === "car" ? "Car Payment" : "Insurance";
+function default_next_due_date(int $dueDay): DateTimeImmutable {
+  $today = new DateTimeImmutable("today");
+  $y = (int)$today->format("Y");
+  $m = (int)$today->format("n");
+  $d = (int)$today->format("j");
+
+  if ($d <= $dueDay) return due_date_for_month($y, $m, $dueDay);
+  return due_date_for_month($y, $m, $dueDay)->modify("+1 month");
 }
 
-function bill_badge(string $billKey): string {
-  return $billKey === "car" ? "CAR" : "INS";
+function next_month_due(DateTimeImmutable $due, int $dueDay): DateTimeImmutable {
+  $next = $due->modify("+1 month");
+  return due_date_for_month((int)$next->format("Y"), (int)$next->format("n"), $dueDay);
 }
 
-// Handle button press
+function days_until(DateTimeImmutable $due): int {
+  $today = new DateTimeImmutable("today");
+  // difference in whole days (due - today)
+  return (int)$today->diff($due)->format('%r%a');
+}
+
+function countdown_label(int $days): string {
+  if ($days === 0) return "Due today";
+  if ($days === 1) return "Due in 1 day";
+  if ($days > 1) return "Due in {$days} days";
+  $over = abs($days);
+  if ($over === 1) return "OVERDUE by 1 day";
+  return "OVERDUE by {$over} days";
+}
+
+// Handle button press (dynamic bills)
 if ($_SERVER["REQUEST_METHOD"] === "POST") {
   csrf_verify();
 
-  $billKey = $_POST["bill_key"] ?? "";
-  if (!in_array($billKey, ["car", "insurance"], true)) {
-    $error = "Invalid bill.";
-  } else {
-    try {
-      $pdo->beginTransaction();
+  $mode = $_POST["mode"] ?? "pay";  
 
-      // Lock status row if it exists
-      $stmt = $pdo->prepare("SELECT next_due_date FROM bill_status WHERE user_id = ? AND bill_key = ? FOR UPDATE");
-      $stmt->execute([$userId, $billKey]);
-      $row = $stmt->fetch();
+  // Mark paid
+  $billId = (int)($_POST["bill_id"] ?? 0);
+  if ($billId <= 0) {
+    flash_set("error", "Invalid bill.");
+    header("Location: /payments");
+    exit;
+  }
 
-      $due = $row
-        ? new DateTimeImmutable((string)$row["next_due_date"])
-        : default_next_due_date();
+  try {
+    $pdo->beginTransaction();
 
-      $period = period_from_due($due);
+    // Lock the bill row
+    $stmt = $pdo->prepare("
+      SELECT id, name, due_day, next_due_date
+      FROM user_bills
+      WHERE id = ? AND user_id = ? AND is_active = true
+      FOR UPDATE
+    ");
+    $stmt->execute([$billId, $userId]);
+    $bill = $stmt->fetch();
 
-      // Mark this period as paid (idempotent due to unique constraint)
-      $ins = $pdo->prepare("INSERT INTO bill_payments (user_id, bill_key, period) VALUES (?, ?, ?)");
-      try {
-        $ins->execute([$userId, $billKey, $period]);
-      } catch (PDOException $e) {
-        // If already paid for this period, keep status the same and show a message
-        // Postgres unique violation is 23505
-        if (($e->getCode() ?? "") === "23505") {
-          $pdo->rollBack();
-          $error = bill_label($billKey) . " already marked paid for {$period}.";
-          goto DONE;
-        }
-        throw $e;
-      }
-
-      // Advance next due to next month's 20th
-      $nextDue = next_month_20th($due)->format("Y-m-d");
-
-      if ($row) {
-        $upd = $pdo->prepare("UPDATE bill_status SET next_due_date = ?, updated_at = now() WHERE user_id = ? AND bill_key = ?");
-        $upd->execute([$nextDue, $userId, $billKey]);
-      } else {
-        $upsert = $pdo->prepare("
-          INSERT INTO bill_status (user_id, bill_key, next_due_date)
-          VALUES (?, ?, ?)
-          ON CONFLICT (user_id, bill_key)
-          DO UPDATE SET next_due_date = EXCLUDED.next_due_date, updated_at = now()
-        ");
-        $upsert->execute([$userId, $billKey, $nextDue]);
-      }
-
-      $pdo->commit();
-      $success = bill_label($billKey) . " marked paid for {$period}. Next due: " . (new DateTimeImmutable($nextDue))->format("M j, Y") . ".";
-    } catch (Throwable $e) {
-      if ($pdo->inTransaction()) $pdo->rollBack();
-      $error = "Could not update payment status.";
+    if (!$bill) {
+      $pdo->rollBack();
+      flash_set("error", "Bill not found or disabled.");
+      header("Location: /payments");
+      exit;
     }
+
+    $due = new DateTimeImmutable((string)$bill["next_due_date"]);
+    $dueDay = (int)$bill["due_day"];
+    $period = period_from_due($due);
+
+    // Insert payment history (unique constraint prevents duplicates)
+    $ins = $pdo->prepare("INSERT INTO user_bill_payments (user_id, bill_id, period) VALUES (?, ?, ?)");
+    try {
+      $ins->execute([$userId, $billId, $period]);
+    } catch (PDOException $e) {
+      if (($e->getCode() ?? "") === "23505") {
+        $pdo->rollBack();
+        flash_set("error", $bill["name"] . " already marked paid for {$period}.");
+        header("Location: /payments");
+        exit;
+      }
+      throw $e;
+    }
+
+    // Advance next due date to next month on the same due day
+    $nextDue = next_month_due($due, $dueDay)->format("Y-m-d");
+
+    $upd = $pdo->prepare("UPDATE user_bills SET next_due_date = ?, updated_at = now() WHERE id = ? AND user_id = ?");
+    $upd->execute([$nextDue, $billId, $userId]);
+
+    $pdo->commit();
+    flash_set("success", $bill["name"] . " marked paid for {$period}. Next due: " . (new DateTimeImmutable($nextDue))->format("M j, Y") . ".");
+    header("Location: /payments");
+    exit;
+  } catch (Throwable $e) {
+    if ($pdo->inTransaction()) $pdo->rollBack();
+    $error = "Could not update payment status.";
   }
 }
-DONE:
 
-// Read statuses (ensure defaults if missing)
-$statusStmt = $pdo->prepare("SELECT bill_key, next_due_date FROM bill_status WHERE user_id = ?");
-$statusStmt->execute([$userId]);
-$statuses = [];
-foreach ($statusStmt->fetchAll() as $r) {
-  $statuses[$r["bill_key"]] = (string)$r["next_due_date"];
-}
+$success = $success ?: flash_get("success");
+$error   = $error   ?: flash_get("error");
 
-$carDue = isset($statuses["car"]) ? new DateTimeImmutable($statuses["car"]) : default_next_due_date();
-$insDue = isset($statuses["insurance"]) ? new DateTimeImmutable($statuses["insurance"]) : default_next_due_date();
+// Read bills
+$billsStmt = $pdo->prepare("
+  SELECT id, name, due_day, next_due_date
+  FROM user_bills
+  WHERE user_id = ? AND is_active = true
+  ORDER BY next_due_date ASC, name ASC
+");
+$billsStmt->execute([$userId]);
+$bills = $billsStmt->fetchAll();
 
 // Recent payments
 $histStmt = $pdo->prepare("
-  SELECT bill_key, period, paid_at
-  FROM bill_payments
-  WHERE user_id = ?
-  ORDER BY paid_at DESC
+  SELECT b.name, p.period, p.paid_at
+  FROM user_bill_payments p
+  JOIN user_bills b ON b.id = p.bill_id
+  WHERE p.user_id = ?
+  ORDER BY p.paid_at DESC
   LIMIT 20
 ");
 $histStmt->execute([$userId]);
@@ -151,7 +170,7 @@ require __DIR__ . "/partials/top.php";
           <div class="h1" style="margin:0;">Payments</div>
           <p class="sub">Tap to mark the month paid. Next due auto-sets to the 20th.</p>
         </div>
-        <span class="pill">Due day: 20</span>
+        <a href="#"><span class="pill">Manage Bills</span></a>
       </div>
 
       <div class="hr"></div>
@@ -165,7 +184,15 @@ require __DIR__ . "/partials/top.php";
         <div class="hr"></div>
       <?php endif; ?>
 
-      <div class="shell" style="grid-template-columns: 1fr 1fr; gap:16px; align-items:start;">
+      <style>
+        @media (min-width: 550px){
+          .shell { 
+            grid-template-columns: 1fr 1fr;
+        }
+        }
+      </style>
+
+      <div class="shell" style="gap:16px; align-items:start; max-width: none;">
         <!-- Buttons -->
         <div class="tile">
           <div class="t">PAY THIS MONTH</div>
@@ -173,78 +200,77 @@ require __DIR__ . "/partials/top.php";
 
           <div class="hr"></div>
 
+          <?php if (count($bills) === 0): ?>
+          <div class="sub">No bills yet. Add some in <a href="/bills_manage">Manage Bills</a>.</div>
+          <?php else: ?>
+          <?php foreach ($bills as $b):
+            $due = new DateTimeImmutable((string)$b["next_due_date"]);
+            $period = $due->format("Y-m");
+          ?>
+
+          <?php
+          $due = new DateTimeImmutable((string)$b["next_due_date"]);
+          $days = days_until($due);
+          $countdown = countdown_label($days);
+          $period = $due->format("Y-m");
+          ?>
+
           <div class="tile" style="margin-bottom:12px;">
             <div class="row">
               <div>
-                <div class="t"><?= bill_badge("car") ?></div>
-                <div class="v"><?= htmlspecialchars(bill_label("car")) ?></div>
-                <div class="sub" style="margin-top:6px;">
-                  Next due: <span style="font-family:var(--mono);"><?= htmlspecialchars($carDue->format("M j, Y")) ?></span>
-                  • Period: <span style="font-family:var(--mono);"><?= htmlspecialchars($carDue->format("Y-m")) ?></span>
+                <div class="t">BILL</div>
+                <div class="v"><?= htmlspecialchars($b["name"]) ?></div>
+                <div class="sub" style="margin-top:6px; margin-bottom: 6px;">
+                  Next due: <span style="font-family:var(--mono);"><?= htmlspecialchars($due->format("m/j/Y")) ?></span>
+                  • Period: <span style="font-family:var(--mono);"><?= htmlspecialchars($period) ?></span>
                 </div>
+                  <span class="pill" style="font-family:var(--mono);"><?= htmlspecialchars($countdown) ?></span>
               </div>
+
               <form method="post">
                 <input type="hidden" name="csrf_token" value="<?= htmlspecialchars(csrf_token()) ?>">
-                <input type="hidden" name="bill_key" value="car">
+                <input type="hidden" name="bill_id" value="<?= (int)$b["id"] ?>">
+                <input type="hidden" name="mode" value="pay">
                 <button class="btn" type="submit">Mark Paid</button>
               </form>
             </div>
           </div>
+          <?php endforeach; ?>
+          <?php endif; ?>
+      </div>
+      <!-- History -->
+      <div class="tile">
+        <div class="t">HISTORY</div>
+        <div class="sub" style="margin-top:8px;">Last 20 payment confirmations.</div>
 
-          <div class="tile">
-            <div class="row">
-              <div>
-                <div class="t"><?= bill_badge("insurance") ?></div>
-                <div class="v"><?= htmlspecialchars(bill_label("insurance")) ?></div>
-                <div class="sub" style="margin-top:6px;">
-                  Next due: <span style="font-family:var(--mono);"><?= htmlspecialchars($insDue->format("M j, Y")) ?></span>
-                  • Period: <span style="font-family:var(--mono);"><?= htmlspecialchars($insDue->format("Y-m")) ?></span>
+        <div class="hr"></div>
+
+        <div style="display:grid; gap:10px;">
+          <?php if (count($history) === 0): ?>
+            <div class="sub">No payment history yet.</div>
+          <?php else: ?>
+            <?php foreach ($history as $h):
+              $name = (string)$h["name"];
+              $when = date("M j, Y g:i A", strtotime((string)$h["paid_at"]));
+            ?>
+              <div class="tile tx-row" style="padding:12px 12px;">
+                <div class="row" style="align-items:flex-start;">
+                  <div>
+                    <div class="t" style="opacity:.85;"><?= htmlspecialchars($name) ?></div>
+                    <div class="v" style="font-family:var(--mono); font-size:15px;">
+                      Period <?= htmlspecialchars((string)$h["period"]) ?>
+                    </div>
+                    <div class="sub" style="margin-top:6px; font-family:var(--mono); opacity:.85;">
+                      Paid: <?= htmlspecialchars($when) ?>
+                    </div>
+                  </div>
+                  <span class="pill">PAID</span>
                 </div>
               </div>
-              <form method="post">
-                <input type="hidden" name="csrf_token" value="<?= htmlspecialchars(csrf_token()) ?>">
-                <input type="hidden" name="bill_key" value="insurance">
-                <button class="btn btn-ghost" type="submit">Mark Paid</button>
-              </form>
-            </div>
-          </div>
-        </div>
-
-        <!-- History -->
-        <div class="tile">
-          <div class="t">HISTORY</div>
-          <div class="sub" style="margin-top:8px;">Last 20 payment confirmations.</div>
-
-          <div class="hr"></div>
-
-          <div style="display:grid; gap:10px;">
-            <?php if (count($history) === 0): ?>
-              <div class="sub">No payment history yet.</div>
-            <?php else: ?>
-              <?php foreach ($history as $h):
-                $bk = (string)$h["bill_key"];
-                $when = date("M j, Y g:i A", strtotime((string)$h["paid_at"]));
-              ?>
-                <div class="tile tx-row" style="padding:12px 12px;">
-                  <div class="row" style="align-items:flex-start;">
-                    <div>
-                      <div class="t" style="opacity:.85;"><?= htmlspecialchars(bill_label($bk)) ?></div>
-                      <div class="v" style="font-family:var(--mono); font-size:15px;">
-                        Period <?= htmlspecialchars((string)$h["period"]) ?>
-                      </div>
-                      <div class="sub" style="margin-top:6px; font-family:var(--mono); opacity:.85;">
-                        Paid: <?= htmlspecialchars($when) ?>
-                      </div>
-                    </div>
-                    <span class="pill"><?= htmlspecialchars(strtoupper(bill_badge($bk))) ?></span>
-                  </div>
-                </div>
-              <?php endforeach; ?>
-            <?php endif; ?>
-          </div>
+            <?php endforeach; ?>
+          <?php endif; ?>
         </div>
       </div>
-
     </div>
   </div>
 </div>
@@ -258,6 +284,14 @@ require __DIR__ . "/partials/top.php";
     setTimeout(() => statusBox.style.transform = 'translateY(0)', 140);
   }
 })();
+
+document.querySelectorAll('form button[type="submit"]').forEach(btn => {
+  btn.addEventListener('click', () => {
+    btn.disabled = true;
+    btn.textContent = "Saving...";
+    btn.closest('form').submit();
+  });
+});
 </script>
 
 <?php require __DIR__ . "/partials/bottom.php"; ?>
