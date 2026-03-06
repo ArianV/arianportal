@@ -18,7 +18,7 @@ $dbHost = $_ENV["DB_HOST"] ?? "aws-1-us-west-1.pooler.supabase.com";
 $dbPort = (int)($_ENV["DB_PORT"] ?? 6543);
 $dbName = $_ENV["DB_NAME"] ?? "postgres";
 $dbUser = $_ENV["DB_USER"] ?? "postgres.jskvgcvpvgwsneeohaow";
-$dbPass = $_ENV["DB_PASS"] ?? "ArianVahdat03!";
+$dbPass = $_ENV["DB_PASS"] ?? "";
 
 // Supabase requires SSL
 $dsn = "pgsql:host={$dbHost};port={$dbPort};dbname={$dbName};sslmode=require";
