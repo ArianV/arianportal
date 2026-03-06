@@ -81,7 +81,7 @@ usort($billRows, function($a, $b) {
               <div class="h1" style="margin:0;">Welcome Back!</div>
               <p class="sub">Access Granted ✅</p>
             </div>
-    
+     
             <!-- Move this to SETTINGS page when created
 
             <form method="post" action="logout_all.php" onsubmit="return confirm('Log out everywhere?');">
